@@ -1,6 +1,15 @@
 # ZOA-Helper
 ZOA Helper is a command line tool for use by members of the Virtual Oakland ARTCC (https://oakartcc.org/) on the VATSIM Network.
 
+Command-line features include:
+- Retrieve real-world IFR flightplans from the FlightAware IFR Analyzer
+- Quick-open routes in SkyVector in the default web browser
+- Search ZOA TEC routes for flights originating and terminating within ZOA
+- Search LOAs for applicable routing rules for flights originating in ZOA and terminating in ZLA, ZSE or ZLC
+- Retrieve SIDs and STARs for a given airport, and open a selected chart in the default web browser
+- Convert ICAO codes to "full names" for airports, airlines and aircraft
+---
+
 ## How to Run
 ### Executable
 _Coming Soon_
@@ -10,6 +19,7 @@ _Coming Soon_
 2. Create and activate a Python virtual environment
 3. Use `pip install -r requirements.txt` to install the required packages
 4. Use the virtual enviroment's Python interpreter to run `zoa_helper.py`
+---
 
 ## How to Build from Source
 1. Clone the repository using `git clone https://github.com/kengreim/ZOA-Helper.git`

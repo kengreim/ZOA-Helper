@@ -1,6 +1,5 @@
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
-from InquirerPy.separator import Separator
 from InquirerPy.utils import color_print
 from tabulate import tabulate
 import io
@@ -77,11 +76,16 @@ def load_alias_data(txt_filename):
                 cmds[m.group('cmd')] = m.group('txt').strip()
     return cmds
 
+def sanitize_airport(airport):
+    if len(airport) == 3:
+        return 'K' + airport.upper()
+    return airport.upper()
+
 def flightaware_url(departure, arrival):
-    base_url = 'https://flightaware.com/analysis/route.rvt'
-    origin_string = 'origin=%s' % departure
-    destination_string = 'destination=%s' % arrival
-    return '%s?%s&%s' % (base_url, origin_string, destination_string)
+    base_url = 'https://flightaware.com/analysis/route.rvt?'
+    params = {'origin': departure, 'destination': arrival}
+    params_url = urllib.parse.urlencode(params)
+    return base_url + params_url
 
 def get_flightaware_routes(departure, arrival):
     r = requests.get(flightaware_url(departure,arrival))
@@ -92,37 +96,35 @@ def get_flightaware_routes(departure, arrival):
     return [simplify_dict(i, ['Frequency', 'Altitude', 'Full Route']) for i in results if i]
 
 def open_flightaware(departure, arrival):
-    webbrowser.open_new(flightaware_url(departure,arrival))
+    webbrowser.open_new(flightaware_url(departure, arrival))
 
 def open_skyvector(flightplan):
     url = 'https://skyvector.com/?fpl=%s' % flightplan
     webbrowser.open_new(url)
 
-def get_faa_stars(arrival):
-    url = 'https://nfdc.faa.gov/nfdcApps/services/ajv5/airportDisplay.jsp?airportId=%s' % arrival
+def get_faa_charts(airport, chart_type='SIDS'):
+    chart_str_dict = {
+        'SIDS'  : 'Departure Procedure (DP) Charts',
+        'STARS' : 'Standard Terminal Arrival (STAR) Charts'
+    }
+    if chart_type not in chart_str_dict:
+        return None
+    chart_str = chart_str_dict[chart_type]
+    
+    url = 'https://nfdc.faa.gov/nfdcApps/services/ajv5/airportDisplay.jsp?airportId=%s' % airport
     r = requests.get(url)
     soup = BeautifulSoup(r.text, 'html.parser')
-    h3 = soup.find('h3', string='Standard Terminal Arrival (STAR) Charts')
-    spans = h3.find_next_siblings('span')
-    stars = {}
-    for s in spans:
-        links = s.find_all('a')
-        for l in links:
-            stars[l.text] = l['href']
-    return(stars)
-
-def get_faa_sids(departure):
-    url = 'https://nfdc.faa.gov/nfdcApps/services/ajv5/airportDisplay.jsp?airportId=%s' % departure
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    h3 = soup.find('h3', string='Departure Procedure (DP) Charts')
-    spans = h3.find_next_siblings('span')
-    sids = {}
-    for s in spans:
-        links = s.find_all('a')
-        for l in links:
-            sids[l.text] = l['href']
-    return(sids)
+    h3 = soup.find('h3', string=chart_str)
+    if h3:
+        spans = h3.find_next_siblings('span')
+        results = {}
+        for s in spans:
+            links = s.find_all('a')
+            for l in links:
+                results[l.text] = l['href']
+        return(results)
+    else:
+        return None
 
 def get_atis(airport):
     h = {
@@ -227,46 +229,55 @@ def sfo_runway_config(metar=None, print_table=True):
                     return 'Use Runway %s with headwind %d kts' % (max_hw_rw, wind_components[max_hw_rw][0])
 
 def main():
+    # Load all necessary data
     airport_data = load_airport_data('data/airports.csv')
     airline_data = load_airline_data('data/airlines.csv')
     loa_route_data = load_route_data('data/routes.csv')
     aircraft_data = load_aircraft_data('data/aircraft.csv')
     faa_route_data = load_FAA_route_data('data/prefroutes_db.csv')
     alias_route_data = load_alias_data('data/ZOA_Alias.txt')
+    
+    # Create validator functions for InquirerPy
     def airport_validator(icao_code):
         return icao_code.upper() in airport_data
     def airline_validator(icao_code):
         return icao_code.upper() in airline_data
     def aircraft_validator(icao_code):
         return icao_code.upper() in aircraft_data
-    default_dep = 'KOAK'
+
+    # Prompt user to set default departure and arrival airports when the program starts.
+    # Note that we don't call the validator functions here since we aren't actually performing
+    # any lookups yet
+    default_dep = ''
     default_arr = ''
-
-
     departure = inquirer.text(
         message = 'Default Departure:',
         default = default_dep
     ).execute()
-    default_dep = departure
+    default_dep = sanitize_airport(departure)
     arrival = inquirer.text(
         message = 'Default Arrival:',
         default = default_arr
     ).execute()
-    default_arr = arrival
-    print()
-    try:
-        print(get_atis(departure.upper()), end='\n\n')
-    except:
-        print('ERROR: COULD NOT RETRIEVE D-ATIS', end='\n\n')
-    try:
-        print(get_latest_metar(departure.upper())['raw_text'], end='\n\n')
-    except:
-        print('ERROR: COULD NOT RETRIEVE METAR', end='\n\n')
+    default_arr = sanitize_airport(arrival)
+    if default_dep:
+        try:
+            color_print([('green', '\nD-ATIS')])
+            print(get_atis(default_dep))
+        except:
+            print('ERROR: COULD NOT RETRIEVE D-ATIS')
+        try:
+            color_print([('green', '\nMETAR')])
+            print(get_latest_metar(default_dep)['raw_text'])
+        except:
+            print('ERROR: COULD NOT RETRIEVE METAR')
     
-    if departure.upper() == 'KSFO':
-        print(sfo_runway_config(print_table=True), end='\n\n')
+    if default_dep == 'KSFO':
+        color_print([('green', '\nRunway Winds and Config')])
+        print(sfo_runway_config(print_table=True))
 
     while(True):
+        print()
         action = inquirer.rawlist(
             message = 'Select an action:',
             choices = [
@@ -306,7 +317,6 @@ def main():
             ).execute()
             if open_browser:
                 open_flightaware(departure, arrival)
-            print()
 
         if action == 'SkyVector Analyzer':
             departure = inquirer.text(
@@ -324,7 +334,6 @@ def main():
             flightplan = inquirer.text(
                 message = 'Flight Plan:',
             ).execute()
-            print()
             full_plan = '%s %s %s' % (departure, flightplan, arrival)
             open_skyvector(full_plan)
 
@@ -335,7 +344,6 @@ def main():
             ).execute()
             results = [[k,v] for k, v in alias_route_data.items() if search_string.upper() in k.upper()]
             print(tabulate(results, headers=['Command', 'Text']))
-            print()
 
         if action == 'FAA Preferred Routes':
             departure = inquirer.text(
@@ -355,7 +363,6 @@ def main():
             results = [i for i in faa_route_data[departure] if i['Dest'] == arrival]
             headers = ['Route String', 'Type', 'Altitude', 'Aircraft']
             print(tabulate([simplify_dict(i, headers) for i in results], headers='keys'))
-            print()
 
         if action == 'LOA Route Check':
             departure = inquirer.text(
@@ -373,7 +380,6 @@ def main():
             results = [i for i in loa_route_data if re.match(i['Departure_Regex'], departure.upper()) and re.match(i['Arrival_Regex'], arrival.upper())]
             headers = ['Route', 'RNAV Required', 'Notes']
             print(tabulate([simplify_dict(i, headers) for i in results], headers='keys'))
-            print()
 
         if action == 'Chart Reference':
             action2 = inquirer.rawlist(
@@ -397,7 +403,6 @@ def main():
                 ).execute()
                 url = 'https://www.airnav.com/airport/%s' % airport
                 webbrowser.open_new(url)
-                print()
             
             if action2 == 'STARs':
                 airport = inquirer.text(
@@ -406,16 +411,18 @@ def main():
                     invalid_message = 'Airport not found',
                     default = default_arr
                 ).execute()
-                stars = get_faa_stars(airport)
-                sorted_stars = sorted(stars.keys())
-                selected_star = inquirer.select(
-                    message = 'Select STAR to Open',
-                    choices = [Choice(value=None, name='Skip')] + sorted_stars,
-                    default = None
-                ).execute()
-                if selected_star:
-                    webbrowser.open_new(stars[selected_star])
-                print()
+                stars = get_faa_charts(airport, 'STARS')
+                if stars:
+                    sorted_stars = sorted(stars.keys())
+                    selected_star = inquirer.select(
+                        message = 'Select STAR to Open',
+                        choices = [Choice(value=None, name='Skip')] + sorted_stars,
+                        default = None
+                    ).execute()
+                    if selected_star:
+                        webbrowser.open_new(stars[selected_star])
+                else:
+                    color_print([('red', 'ERROR: STARs for %s not found' % airport)])
 
             if action2 == 'SIDs':
                 airport = inquirer.text(
@@ -424,19 +431,21 @@ def main():
                     invalid_message = 'Airport not found',
                     default = default_dep
                 ).execute()
-                sids = get_faa_sids(airport)
-                sorted_sids = sorted(sids.keys())
-                selected_sid = inquirer.select(
-                    message = 'Select SID to Open',
-                    choices = [Choice(value=None, name='Skip')] + sorted_sids,
-                    default = None
-                ).execute()
-                if selected_sid:
-                    webbrowser.open_new(sids[selected_sid])
-                print()
+                sids = get_faa_charts(airport, 'SIDS')
+                if sids:
+                    sorted_sids = sorted(sids.keys())
+                    selected_sid = inquirer.select(
+                        message = 'Select SID to Open',
+                        choices = [Choice(value=None, name='Skip')] + sorted_sids,
+                        default = None
+                    ).execute()
+                    if selected_sid:
+                        webbrowser.open_new(sids[selected_sid])
+                else:
+                    color_print([('red', 'ERROR: STARs for %s not found' % airport)])
 
             if action2 == 'Skip':
-                print()
+                pass
 
         if action == 'Code Lookup':
             action2 = inquirer.rawlist(
@@ -459,7 +468,6 @@ def main():
                     invalid_message = 'Airport not found'
                 ).execute()
                 color_print([('green', airport_data[airport.upper()]['name'])])
-                print()
 
             if action2 == 'Airline Callsign Lookup':
                 airline = inquirer.text(
@@ -468,7 +476,6 @@ def main():
                     invalid_message = 'Airline not found'
                 ).execute()
                 color_print([('green', airline_data[airline.upper()]['Call sign'])])
-                print()
             
             if action2 == 'Aircraft Code Lookup':
                 aircraft = inquirer.text(
@@ -478,10 +485,9 @@ def main():
                 ).execute()
                 color_print([('green', aircraft_data[aircraft.upper()]['Manufacturer and Aircraft Type / Model'])])
                 color_print([('green', aircraft_data[aircraft.upper()]['WTC'])])
-                print()
             
             if action2 == 'Skip':
-                print()
+                pass
 
         if action == 'Clear Screen':
             os.system('cls' if os.name == 'nt' else 'clear')
@@ -490,5 +496,6 @@ def main():
             exit()
 
 if __name__ == '__main__':
+    # Clear screen if this was run directly from terminal
     os.system('cls' if os.name == 'nt' else 'clear')
     main()
