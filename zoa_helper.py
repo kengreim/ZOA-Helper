@@ -13,6 +13,7 @@ import re
 import json
 import xmltodict
 import math
+import urllib
 
 def simplify_dict(original_dict, new_dict_keys):
     return {k: v for k, v in original_dict.items() if k in new_dict_keys}
@@ -82,7 +83,7 @@ def flightaware_url(departure, arrival):
     destination_string = 'destination=%s' % arrival
     return '%s?%s&%s' % (base_url, origin_string, destination_string)
 
-def get_flightaware(departure, arrival):
+def get_flightaware_routes(departure, arrival):
     r = requests.get(flightaware_url(departure,arrival))
     soup = BeautifulSoup(r.text, 'html.parser')
     table_raw = soup.find('table', class_ = 'prettyTable fullWidth')
@@ -125,8 +126,8 @@ def get_faa_sids(departure):
 
 def get_atis(airport):
     h = {
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache"
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
     }
     try:
         base_url = 'http://datis.clowd.io/api/'
@@ -134,34 +135,31 @@ def get_atis(airport):
         r = requests.get(full_url, headers=h)
         return json.loads(r.text)[0]['datis']
     except:
-        return "ERROR: NO D-ATIS FOUND"
+        return 'ERROR: NO D-ATIS FOUND'
 
 def get_latest_metar(airport, last_hours=2):
     h = {
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache"
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
     }
-    base_url = 'https://www.aviationweather.gov/adds/dataserver_current/httpparam?'
-    full_url = base_url
-    params = {
-        'dataSource' : 'metars',
-        'requestType' : 'retrieve',
-        'format' : 'xml',
-        'mostRecent' : 'true',
-        'stationString' : airport,
-        'hoursBeforeNow' : last_hours
-    }
-    first = True
-    for k, v in params.items():
-        if first:
-            full_url += '%s=%s' % (k, v)
-            first = False
-        else:
-            full_url += '&%s=%s' % (k,v)
-    r = requests.get(full_url, headers=h)
-    x = xmltodict.parse(r.text)
-    metar_dict = x['response']['data']['METAR']
-    return metar_dict
+    try:
+        base_url = 'https://www.aviationweather.gov/adds/dataserver_current/httpparam?'
+        params = {
+            'dataSource' : 'metars',
+            'requestType' : 'retrieve',
+            'format' : 'xml',
+            'mostRecent' : 'true',
+            'stationString' : airport,
+            'hoursBeforeNow' : last_hours
+        }
+        params_url = urllib.parse.urlencode(params)
+        full_url = base_url + params_url
+        r = requests.get(full_url, headers=h)
+        x = xmltodict.parse(r.text)
+        metar_dict = x['response']['data']['METAR']
+        return metar_dict
+    except:
+        return 'ERROR: METAR NOT FOUND OR UNAVAILABLE'
 
 def calc_wind_components(headwind_deg, wind_deg, wind_kts):
     alpha = wind_deg - headwind_deg 
@@ -300,7 +298,7 @@ def main():
                 invalid_message = 'Airport not found',
                 default = default_arr
             ).execute()
-            routes = get_flightaware(departure, arrival)
+            routes = get_flightaware_routes(departure, arrival)
             print(tabulate(routes, headers='keys'))
             open_browser = inquirer.confirm(
                 message = 'Open in Browser?', 
