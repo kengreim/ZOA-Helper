@@ -12,7 +12,9 @@ Command-line features include:
 
 ## How to Run
 ### Executable
-_Coming Soon_
+1. Download latest release: https://github.com/kengreim/ZOA-Helper/releases/tag/v0.1.0
+2. Unzip to location of your choice
+3. Run zoa_helper.exe, which should open a command line / terminal prompt. On Windows, I suggest you install Windows Terminal (https://apps.microsoft.com/store/detail/windows-terminal/9N0DX20HK701?hl=en-us&gl=us)
 
 ### From Source
 1. Clone the repository using `git clone https://github.com/kengreim/ZOA-Helper.git`
