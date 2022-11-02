@@ -343,7 +343,10 @@ def main():
                 default = ''
             ).execute()
             results = [[k,v] for k, v in alias_route_data.items() if search_string.upper() in k.upper()]
-            print(tabulate(results, headers=['Command', 'Text']))
+            if results:
+                print(tabulate(results, headers=['Command', 'Text']))
+            else:
+                color_print([('red', 'No results found')])
 
         if action == 'FAA Preferred Routes':
             departure = inquirer.text(
@@ -362,7 +365,10 @@ def main():
             arrival = arrival.upper()[1:]
             results = [i for i in faa_route_data[departure] if i['Dest'] == arrival]
             headers = ['Route String', 'Type', 'Altitude', 'Aircraft']
-            print(tabulate([simplify_dict(i, headers) for i in results], headers='keys'))
+            if results:
+                print(tabulate([simplify_dict(i, headers) for i in results], headers='keys'))
+            else:
+                color_print([('red', 'No results found')])
 
         if action == 'LOA Route Check':
             departure = inquirer.text(
@@ -379,7 +385,10 @@ def main():
             ).execute()
             results = [i for i in loa_route_data if re.match(i['Departure_Regex'], departure.upper()) and re.match(i['Arrival_Regex'], arrival.upper())]
             headers = ['Route', 'RNAV Required', 'Notes']
-            print(tabulate([simplify_dict(i, headers) for i in results], headers='keys'))
+            if results:
+                print(tabulate([simplify_dict(i, headers) for i in results], headers='keys'))
+            else:
+                color_print([('red', 'No results found')])
 
         if action == 'Chart Reference':
             action2 = inquirer.rawlist(
@@ -422,7 +431,7 @@ def main():
                     if selected_star:
                         webbrowser.open_new(stars[selected_star])
                 else:
-                    color_print([('red', 'ERROR: STARs for %s not found' % airport)])
+                    color_print([('red', 'STARs for %s not found' % airport)])
 
             if action2 == 'SIDs':
                 airport = inquirer.text(
@@ -442,7 +451,7 @@ def main():
                     if selected_sid:
                         webbrowser.open_new(sids[selected_sid])
                 else:
-                    color_print([('red', 'ERROR: STARs for %s not found' % airport)])
+                    color_print([('red', 'SIDs for %s not found' % airport)])
 
             if action2 == 'Skip':
                 pass
